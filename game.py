@@ -1,6 +1,5 @@
 import curses
 from time import time, sleep
-from curses.textpad import Textbox, rectangle
 
 from pieces import *
 
@@ -32,10 +31,10 @@ def draw_piece(window, piece: AbstractPiece):
 
 def draw_next_piece(window, piece_class):
 	def erase_piece():
-		for y in range(2, NEXT_PIECE_AREA_HEIGHT):
-			for x in range(NEXT_PIECE_AREA_WIDTH):
-				window.addch(y, 2 * x + 1, " ")
-				window.addch(y, 2 * x + 2, " ")
+		for old_y in range(2, NEXT_PIECE_AREA_HEIGHT):
+			for old_x in range(NEXT_PIECE_AREA_WIDTH):
+				window.addch(old_y, 2 * old_x + 1, " ")
+				window.addch(old_y, 2 * old_x + 2, " ")
 
 	erase_piece()
 
@@ -185,6 +184,17 @@ def clear_line_animation(window, lines):
 		animation_cycle()
 
 
+def end_animation(window):
+	for y in range(1, PLAY_AREA_HEIGHT + 1):
+		for x in range(PLAY_AREA_WIDTH):
+			window.addch(y, 2 * x + 1, curses.ACS_CKBOARD)
+			window.addch(y, 2 * x + 2, curses.ACS_CKBOARD)
+			window.refresh()
+			sleep(0.02)
+
+	sleep(1)
+
+
 def main(stdscr):
 	stdscr.keypad(True)
 	stdscr.nodelay(True)
@@ -253,6 +263,12 @@ def main(stdscr):
 		if advanced_positions:
 			if is_inside_stack(advanced_positions, stack):
 				affected_lines = increase_stack(block.current_positions, stack)
+
+				if 1 in affected_lines:
+					# game over
+					end_animation(play_window)
+					break
+
 				cleared_lines = check_cleared_lines(stack, affected_lines)
 
 				if cleared_lines:
