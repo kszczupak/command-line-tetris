@@ -17,6 +17,7 @@ def main(stdscr):
 	stats = setup_statistics(width)
 	next_piece_window = setup_next_piece_window(width)
 	time_interval, score = setup_score(width)
+	setup_help(width)
 
 	block = get_random_piece()()
 	stats.send(block)
@@ -190,7 +191,7 @@ def setup_next_piece_window(console_width):
 		NEXT_PIECE_AREA_HEIGHT + 2, 2 * NEXT_PIECE_AREA_WIDTH + 2, START_LINE, console_width // 2 + PLAY_AREA_WIDTH + 2
 	)
 	next_piece_window.border()
-	next_piece_window.addstr(1, 3, "NEXT")
+	next_piece_window.addstr(1, 3, "NEXT", curses.A_BOLD and curses.A_UNDERLINE)
 	next_piece_window.refresh()
 
 	return next_piece_window
@@ -261,6 +262,22 @@ def score_gen(window):
 		score += calculate_score(nbr_of_cleared_lines)
 		lvl = lines // 10
 		current_time_interval = update_time_interval()
+
+
+HELP_AREA_HEIGHT = 3
+
+
+def setup_help(console_width):
+	help_window = curses.newwin(
+		HELP_AREA_HEIGHT + 2, 2 * STATS_AREA_WIDTH + 2 + 2 * PLAY_AREA_WIDTH + 2 + 2 * SCORE_AREA_WIDTH + 2,
+		START_LINE + STATS_AREA_HEIGHT + 2, console_width // 2 - PLAY_AREA_WIDTH - 2 * STATS_AREA_WIDTH - 2
+	)
+
+	help_window.border()
+	help_window.addstr(1, 4, "LEFT/RIGHT/DOWN arrow keys to move piece", curses.A_BOLD)
+	help_window.addstr(2, 1, "A - rotate clockwise, D - rotate anticlockwise", curses.A_BOLD)
+	help_window.addstr(3, 20, "Q - Quit", curses.A_BOLD)
+	help_window.refresh()
 
 
 # associated given piece with color pairs defined in init_colors
