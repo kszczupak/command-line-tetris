@@ -6,9 +6,30 @@ from pieces import *
 
 PLAY_AREA_WIDTH = 10
 PLAY_AREA_HEIGHT = 20
+START_LINE = 4
 
 NEXT_PIECE_AREA_WIDTH = 4
 NEXT_PIECE_AREA_HEIGHT = 5
+
+COLOR_MAP = {
+	T_Piece(): 1,
+	J_Piece(): 2,
+	Z_Piece(): 3,
+	Square(): 4,
+	S_Piece(): 5,
+	L_Piece(): 6,
+	LongBar(): 7
+}
+
+
+def init_colors():
+	curses.init_pair(1, curses.COLOR_BLUE, curses.COLOR_BLACK)
+	curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
+	curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
+	curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+	curses.init_pair(5, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+	curses.init_pair(6, curses.COLOR_RED, curses.COLOR_BLACK)
+	curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_BLACK)
 
 
 def re_draw_piece(window, piece: AbstractPiece):
@@ -27,8 +48,9 @@ def draw_piece(window, piece, x_offset=1):
 		# two curses.ACS_CKBOARD can be used also as one basic square
 		# first and last columns serve as borders, so +1 and +2 offsets needs to be used
 		# to account for that
-		window.addch(new_y, 2 * new_x + x_offset, "[")
-		window.addch(new_y, 2 * new_x + x_offset + 1, "]")
+		color = COLOR_MAP[piece]
+		window.addch(new_y, 2 * new_x + x_offset, "[", curses.color_pair(color))
+		window.addch(new_y, 2 * new_x + x_offset + 1, "]", curses.color_pair(color))
 
 	window.refresh()
 
@@ -61,9 +83,9 @@ def draw_stack(window, stack):
 
 		stack['previous_positions'] = None
 
-	for y, x in stack['positions']:
-		window.addch(y, 2 * x + 1, "[")
-		window.addch(y, 2 * x + 2, "]")
+	for (y, x), color in stack['positions'].items():
+		window.addch(y, 2 * x + 1, "[", curses.color_pair(color))
+		window.addch(y, 2 * x + 2, "]", curses.color_pair(color))
 
 	window.refresh()
 
@@ -75,7 +97,7 @@ STATS_PIECES = (T_Piece, J_Piece, Z_Piece, Square, S_Piece, L_Piece, LongBar)
 
 def setup_statistics(console_width):
 	statistics_window = curses.newwin(STATS_AREA_HEIGHT + 2, 2 * STATS_AREA_WIDTH + 2,
-									  5, console_width // 2 - PLAY_AREA_WIDTH - 2* STATS_AREA_WIDTH - 2)
+									  START_LINE, console_width // 2 - PLAY_AREA_WIDTH - 2 * STATS_AREA_WIDTH - 2)
 	statistics_window.border()
 	statistics_window.addstr(1, 3, "STATISTICS")
 	statistics_window.refresh()
@@ -145,11 +167,12 @@ def is_inside_stack(requested_positions, stack):
 	return False
 
 
-def increase_stack(positions, stack):
+def increase_stack(piece, stack):
 	affected_lines = set()
+	color = COLOR_MAP[piece]
 
-	for position in positions:
-		stack['positions'].add(position)
+	for position in piece.current_positions:
+		stack['positions'][position] = color
 		line, _ = position
 		affected_lines.add(line)
 
@@ -182,11 +205,11 @@ def clear_lines(lines, stack):
 
 		return cnt
 
-	new_positions = set()
+	new_positions = dict()
 
 	max_line = max(lines)
 	# update remaining stack positions
-	for position in stack['positions']:
+	for position, color in stack['positions'].items():
 		y, x = position
 
 		if y in lines:
@@ -195,10 +218,10 @@ def clear_lines(lines, stack):
 		if y > max_line:
 			# current position is below cleared lines
 			# position doesn't need to be updated
-			new_positions.add(position)
+			new_positions[position] = color
 		else:
 			new_position = (y + count_lines_above(y), x)
-			new_positions.add(new_position)
+			new_positions[new_position] = color
 
 	stack['previous_positions'] = stack['positions']
 	stack['positions'] = new_positions
@@ -247,18 +270,19 @@ def main(stdscr):
 	stdscr.nodelay(True)
 	height, width = stdscr.getmaxyx()
 	stdscr.refresh()
-	stdscr.addstr(1, width // 2, "Command Line T.")
-	curses.init_pair(1, curses.COLOR_RED, curses.COLOR_WHITE)
+	init_colors()
+	title = "Command Line Tetris"
+	stdscr.addstr(2, width // 2 - len(title) // 2, title)
 
 	# no cursor
 	curses.curs_set(0)
 
 	# height and width of the new window + 2 to account for the borders
-	play_window = curses.newwin(PLAY_AREA_HEIGHT + 2, 2 * PLAY_AREA_WIDTH + 2, 5, width // 2 - 10)
+	play_window = curses.newwin(PLAY_AREA_HEIGHT + 2, 2 * PLAY_AREA_WIDTH + 2, START_LINE, width // 2 - PLAY_AREA_WIDTH)
 	play_window.border()
 
 	# 5 (with text) x 4
-	next_piece_window = curses.newwin(5 + 2, 2 * 4 + 2, 5 + 8, width // 2 + 12)
+	next_piece_window = curses.newwin(5 + 2, 2 * 4 + 2, START_LINE + 8, width // 2 + 12)
 	next_piece_window.border()
 	next_piece_window.addstr(1, 3, "NEXT")
 	next_piece_window.refresh()
@@ -273,7 +297,7 @@ def main(stdscr):
 	draw_piece(play_window, block)
 
 	stack = {
-		"positions": set(),
+		"positions": dict(),
 		"previous_positions": None
 	}
 
@@ -312,7 +336,7 @@ def main(stdscr):
 
 		if advanced_positions:
 			if is_inside_stack(advanced_positions, stack):
-				affected_lines = increase_stack(block.current_positions, stack)
+				affected_lines = increase_stack(block, stack)
 
 				if 1 in affected_lines:
 					# game over
