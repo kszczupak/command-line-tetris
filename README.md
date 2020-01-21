@@ -6,4 +6,4 @@ To start a new game type in terminal:
 
 `python game.py`
 
-  ![](preview.gif)
+![](preview.gif)
