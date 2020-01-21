@@ -8,9 +8,6 @@ PLAY_AREA_WIDTH = 10
 PLAY_AREA_HEIGHT = 20
 START_LINE = 4
 
-NEXT_PIECE_AREA_WIDTH = 4
-NEXT_PIECE_AREA_HEIGHT = 5
-
 COLOR_MAP = {
 	T_Piece(): 1,
 	J_Piece(): 2,
@@ -139,6 +136,69 @@ def statistics_gen(window):
 		stats[piece] += 1
 
 
+SCORE_AREA_WIDTH = 4
+SCORE_AREA_HEIGHT = 8
+
+
+def setup_score(console_width):
+	score_window = curses.newwin(
+		SCORE_AREA_HEIGHT + 2, 2 * SCORE_AREA_WIDTH + 2, START_LINE + 8, console_width // 2 + PLAY_AREA_WIDTH + 2
+	)
+	score_window.border()
+	score_window.addstr(1, 1, "SCORE:", curses.A_BOLD and curses.A_UNDERLINE)
+	score_window.addstr(4, 1, "LINES:", curses.A_BOLD and curses.A_UNDERLINE)
+	score_window.addstr(7, 1, "LEVEL:", curses.A_BOLD and curses.A_UNDERLINE)
+	score_window.refresh()
+
+	score = score_gen(score_window)
+	initial_time_interval = next(score)
+
+	return initial_time_interval, score
+
+
+INITIAL_TIME_INTERVAL = 1
+
+
+def score_gen(window):
+	def update_score_window():
+		window.addstr(2, 2, f"{score:05}")
+		window.addstr(5, 2, f"{lines:03}")
+		window.addstr(8, 2, f"{lvl:03}")
+		window.refresh()
+
+	def calculate_score(lines_cnt):
+		# scoring system taken from https://tetris.fandom.com/wiki/Scoring
+		if lines_cnt == 4:
+			# Tetris
+			return 1200 * (lvl + 1)
+		if lines_cnt == 3:
+			return 300 * (lvl + 1)
+		if lines_cnt == 2:
+			return 100 * (lvl + 1)
+
+		return 40 * (lvl + 1)
+
+	def update_time_interval():
+		offset = lvl * 0.1
+		if INITIAL_TIME_INTERVAL > offset:
+			return INITIAL_TIME_INTERVAL - offset
+
+		return current_time_interval
+
+	current_time_interval = INITIAL_TIME_INTERVAL  # [s]
+	score = 0
+	lines = 0
+	lvl = 0
+
+	while True:
+		update_score_window()
+		nbr_of_cleared_lines = yield current_time_interval
+		lines += nbr_of_cleared_lines
+		score += calculate_score(nbr_of_cleared_lines)
+		lvl = lines // 10
+		current_time_interval = update_time_interval()
+
+
 def validate_positions(requested_positions, stack):
 	for candidate_y, candidate_x in requested_positions:
 		if candidate_y <= 0 or candidate_y > PLAY_AREA_HEIGHT:
@@ -265,6 +325,22 @@ def end_animation(window):
 	sleep(1)
 
 
+NEXT_PIECE_AREA_WIDTH = 4
+NEXT_PIECE_AREA_HEIGHT = 5
+
+
+def setup_next_piece_window(console_width):
+	# 5 (with text) x 4
+	next_piece_window = curses.newwin(
+		NEXT_PIECE_AREA_HEIGHT + 2, 2 * NEXT_PIECE_AREA_WIDTH + 2, START_LINE, console_width // 2 + PLAY_AREA_WIDTH + 2
+	)
+	next_piece_window.border()
+	next_piece_window.addstr(1, 3, "NEXT")
+	next_piece_window.refresh()
+
+	return next_piece_window
+
+
 def main(stdscr):
 	stdscr.keypad(True)
 	stdscr.nodelay(True)
@@ -281,19 +357,15 @@ def main(stdscr):
 	play_window = curses.newwin(PLAY_AREA_HEIGHT + 2, 2 * PLAY_AREA_WIDTH + 2, START_LINE, width // 2 - PLAY_AREA_WIDTH)
 	play_window.border()
 
-	# 5 (with text) x 4
-	next_piece_window = curses.newwin(5 + 2, 2 * 4 + 2, START_LINE + 8, width // 2 + 12)
-	next_piece_window.border()
-	next_piece_window.addstr(1, 3, "NEXT")
-	next_piece_window.refresh()
 	stats = setup_statistics(width)
+	next_piece_window = setup_next_piece_window(width)
+	time_interval, score = setup_score(width)
 
 	block = get_random_piece()()
 	stats.send(block)
 	next_piece = get_random_piece()
 
 	draw_next_piece(next_piece_window, next_piece)
-
 	draw_piece(play_window, block)
 
 	stack = {
@@ -302,7 +374,6 @@ def main(stdscr):
 	}
 
 	timer = time()
-	time_interval = 1
 
 	while True:
 		candidate_positions = None
@@ -348,6 +419,7 @@ def main(stdscr):
 				if cleared_lines:
 					clear_line_animation(play_window, cleared_lines)
 					clear_lines(cleared_lines, stack)
+					time_interval = score.send(len(cleared_lines))
 
 				block = next_piece()
 				stats.send(block)
