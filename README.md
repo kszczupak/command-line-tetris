@@ -6,4 +6,6 @@ To start a new game type in terminal:
 
 `python game.py`
 
-![](preview.gif)
+<p align="center">
+  <img src=preview.gif/>
+</p>
