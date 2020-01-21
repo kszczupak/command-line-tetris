@@ -1,8 +1,8 @@
 import curses
 from time import time, sleep
+from collections import defaultdict
 
 from pieces import *
-
 
 PLAY_AREA_WIDTH = 10
 PLAY_AREA_HEIGHT = 20
@@ -11,22 +11,26 @@ NEXT_PIECE_AREA_WIDTH = 4
 NEXT_PIECE_AREA_HEIGHT = 5
 
 
-def draw_piece(window, piece: AbstractPiece):
-		previous_positions = piece.previous_positions
+def re_draw_piece(window, piece: AbstractPiece):
+	previous_positions = piece.previous_positions
 
-		if previous_positions:
-			for old_y, old_x in previous_positions:
-				window.addch(old_y, 2 * old_x + 1, " ")
-				window.addch(old_y, 2 * old_x + 2, " ")
+	if previous_positions:
+		for old_y, old_x in previous_positions:
+			window.addch(old_y, 2 * old_x + 1, " ")
+			window.addch(old_y, 2 * old_x + 2, " ")
 
-		for new_y, new_x in piece.current_positions:
-			# two curses.ACS_CKBOARD can be used also as one basic square
-			# first and last columns serve as borders, so +1 and +2 offsets needs to be used
-			# to account for that
-			window.addch(new_y, 2 * new_x + 1, "[")
-			window.addch(new_y, 2 * new_x + 2, "]")
+	draw_piece(window, piece)
 
-		window.refresh()
+
+def draw_piece(window, piece, x_offset=1):
+	for new_y, new_x in piece.current_positions:
+		# two curses.ACS_CKBOARD can be used also as one basic square
+		# first and last columns serve as borders, so +1 and +2 offsets needs to be used
+		# to account for that
+		window.addch(new_y, 2 * new_x + x_offset, "[")
+		window.addch(new_y, 2 * new_x + x_offset + 1, "]")
+
+	window.refresh()
 
 
 def draw_next_piece(window, piece_class):
@@ -40,19 +44,13 @@ def draw_next_piece(window, piece_class):
 
 	next_piece = piece_class(initial_rotation_block_position=(3, 2))
 
-	for y, x in next_piece.current_positions:
-		if isinstance(next_piece, LongBar) or isinstance(next_piece, Square):
-			# ugly way of adjusting Long Bar and Square to fit in the preview window
-			x_offset_1 = 1
-			x_offset_2 = 2
-		else:
-			x_offset_1 = 0
-			x_offset_2 = 1
+	if isinstance(next_piece, LongBar) or isinstance(next_piece, Square):
+		# ugly way of adjusting Long Bar and Square to fit in the preview window
+		x_offset = 1
+	else:
+		x_offset = 0
 
-		window.addch(y, 2 * x + x_offset_1, "[")
-		window.addch(y, 2 * x + x_offset_2, "]")
-
-	window.refresh()
+	draw_piece(window, next_piece, x_offset)
 
 
 def draw_stack(window, stack):
@@ -68,6 +66,55 @@ def draw_stack(window, stack):
 		window.addch(y, 2 * x + 2, "]")
 
 	window.refresh()
+
+
+STATS_AREA_WIDTH = 7
+STATS_AREA_HEIGHT = 20
+STATS_PIECES = (T_Piece, J_Piece, Z_Piece, Square, S_Piece, L_Piece, LongBar)
+
+
+def setup_statistics(console_width):
+	statistics_window = curses.newwin(STATS_AREA_HEIGHT + 2, 2 * STATS_AREA_WIDTH + 2,
+									  5, console_width // 2 - PLAY_AREA_WIDTH - 2* STATS_AREA_WIDTH - 2)
+	statistics_window.border()
+	statistics_window.addstr(1, 3, "STATISTICS")
+	statistics_window.refresh()
+
+	line = 2
+
+	for piece_class in STATS_PIECES:
+		piece = piece_class(initial_rotation_block_position=(line, 2))
+
+		if isinstance(piece, LongBar) or isinstance(piece, Square):
+			# ugly way of adjusting Long Bar and Square
+			x_offset = 1
+		else:
+			x_offset = 0
+
+		draw_piece(statistics_window, piece, x_offset)
+		line += 3
+
+	stats = statistics_gen(statistics_window)
+	next(stats)
+
+	return stats
+
+
+def statistics_gen(window):
+	def re_draw_stats():
+		line = 2
+		for piece_class in STATS_PIECES:
+			piece_stats = stats[piece_class()]
+			window.addstr(line, 10, f"{piece_stats:03}")
+			line += 3
+
+		window.refresh()
+
+	stats = defaultdict(int)
+	while True:
+		re_draw_stats()
+		piece = yield
+		stats[piece] += 1
 
 
 def validate_positions(requested_positions, stack):
@@ -200,22 +247,25 @@ def main(stdscr):
 	stdscr.nodelay(True)
 	height, width = stdscr.getmaxyx()
 	stdscr.refresh()
-	stdscr.addstr(1, width//2, "Command Line T.")
+	stdscr.addstr(1, width // 2, "Command Line T.")
+	curses.init_pair(1, curses.COLOR_RED, curses.COLOR_WHITE)
 
 	# no cursor
 	curses.curs_set(0)
 
 	# height and width of the new window + 2 to account for the borders
-	play_window = curses.newwin(PLAY_AREA_HEIGHT + 2,  2 * PLAY_AREA_WIDTH + 2, 5, width//2 - 10)
+	play_window = curses.newwin(PLAY_AREA_HEIGHT + 2, 2 * PLAY_AREA_WIDTH + 2, 5, width // 2 - 10)
 	play_window.border()
 
 	# 5 (with text) x 4
-	next_piece_window = curses.newwin(5 + 2,  2 * 4 + 2, 5 + 8, width//2 + 12)
+	next_piece_window = curses.newwin(5 + 2, 2 * 4 + 2, 5 + 8, width // 2 + 12)
 	next_piece_window.border()
 	next_piece_window.addstr(1, 3, "NEXT")
 	next_piece_window.refresh()
+	stats = setup_statistics(width)
 
 	block = get_random_piece()()
+	stats.send(block)
 	next_piece = get_random_piece()
 
 	draw_next_piece(next_piece_window, next_piece)
@@ -256,7 +306,7 @@ def main(stdscr):
 		if candidate_positions:
 			if validate_positions(candidate_positions, stack):
 				block.accept_move()
-				draw_piece(play_window, block)
+				re_draw_piece(play_window, block)
 			else:
 				block.reject_move()
 
@@ -276,6 +326,7 @@ def main(stdscr):
 					clear_lines(cleared_lines, stack)
 
 				block = next_piece()
+				stats.send(block)
 				next_piece = get_random_piece()
 				draw_next_piece(next_piece_window, next_piece)
 
@@ -283,7 +334,7 @@ def main(stdscr):
 			else:
 				block.accept_move()
 
-			draw_piece(play_window, block)
+			re_draw_piece(play_window, block)
 
 
 if __name__ == '__main__':

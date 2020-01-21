@@ -32,6 +32,15 @@ class AbstractPiece:
         self.previous_rotation_block = None
         self.previous_orientation = None
 
+    def __hash__(self):
+        return hash(self.__class__.__name__)
+
+    def __eq__(self, other):
+        if isinstance(self, other.__class__):
+            return True
+
+        return False
+
     def accept_move(self):
         self.previous_rotation_block = self.rotation_block
         if self.requested_rotation_block:
